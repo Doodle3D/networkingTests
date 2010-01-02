@@ -70,7 +70,7 @@ testSequence = function(cb) {
     		connectToAccesspoint('Doodle3D-wisp', '', function(err, res) {
 				if(!err) {
 					console.log('callback res: ' + res);
-					setTimeout(callback, 15000);
+					setTimeout(callback, 15000); //disconnect test
 				} else {
 					console.log('ERR ' + err);
 				}
@@ -152,7 +152,7 @@ enableHotspot = function(cb) {
 				// callback();
 				// cb(null, 'hotspot enabled');
 				console.log("timeout...")
-				setTimeout(cb, 15000, null, 'hotspot enabled');
+				setTimeout(cb, 5000, null, 'hotspot enabled');
 			})
         }
     ]);
