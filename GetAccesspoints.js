@@ -8,6 +8,7 @@
 var ConnMan = require('jsdx-connman');
 var async = require('async');
 var Q = require('q');
+var exec = require('child_process').exec;
 
 //from: http://stackoverflow.com/questions/8556777/dbus-php-unable-to-launch-dbus-daemon-without-display-for-x11
 process.env.DISPLAY = ':0';
@@ -17,28 +18,143 @@ var connman = new ConnMan();
 
 connman.init(function() {
 
-
-	getAccesspoints(function(err, list) {
+	createAccesspoint(function(err, res) {
 		if(!err) {
-			for (var index in list) {
-				var ap = list[index];
-				var name = String((ap.Name ? ap.Name : '*hidden*'));
-				console.log('  ' + name, '  \t\t\t Strength: ' + ap.Strength + '%', '  \t\t\t Security: ' + ap.Security);
-			}
-			
-			connectToAccesspoint('Doodle3D-wisp', function(err, res) {
-				if(!err) {
-					console.log('callback res: ' + res);
-				} else {
-					console.log('ERR ' + err);
-				}
-			})
+			console.log('RES: ' + res);
 		} else {
-			console.log("error: " + err);
+			console.log('ERR: ' + err);
 		}
 	})
+
+	// getAccesspoints(function(err, list) {
+	// 	if(!err) {
+	// 		for (var index in list) {
+	// 			var ap = list[index];
+	// 			var name = String((ap.Name ? ap.Name : '*hidden*'));
+	// 			console.log('  ' + name, '  \t\t\t Strength: ' + ap.Strength + '%', '  \t\t\t Security: ' + ap.Security);
+	// 		}
+
+	// 		connectToAccesspoint('Doodle3D-wisp', '', function(err, res) {
+	// 			if(!err) {
+	// 				console.log('callback res: ' + res);
+
+	// 				console.log('timeout to disconnect...')
+	// 				setTimeout(disconnectFromAccesspoint, 10000, 'Doodle3D-wisp', function(err, res) {
+	// 					if(!err) {
+	// 						console.log("res: " + res);
+	// 					} else {
+	// 						console.log("err: " + err);
+	// 					}
+	// 				});
+	// 			} else {
+	// 				console.log('ERR ' + err);
+	// 			}
+	// 		})
+	// 	} else {
+	// 		console.log("error: " + err);
+	// 	}
+	// })
 	
 });
+
+createAccesspoint = function(cb) {
+	/* NOTE
+	 * http://serverfault.com/questions/480812/privileges-for-ifconfig
+	 * You do not need root access to use ifconfig to change IP addresses, only CAP_NET_ADMIN.
+	 * $cp /sbin/ifconfig .
+	 * $sudo setcap cap_net_admin=eip ./ifconfig
+	 * $./ifconfig eth0 1.2.3.4    # succeeds
+	 */
+
+	// cb(null, 'created accesspoint');
+
+	//TODO
+	//ps aux | grep dnsmasq
+	//kill <pid>
+
+	var wlanId = 'wlan3';
+
+	async.series
+    ([  
+        function (callback)
+        {
+            console.log('bring '+wlanId+' up...');
+            //note: ./ifconfigUser is local copy of ifconfig with previleges
+            var child = exec('./ifconfigUser '+wlanId+' up');
+			child.stdout.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.stderr.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.on('close', function(code) {
+				callback();
+			})
+        }
+        ,
+        function (callback)
+        {
+            console.log('set '+wlanId+' ip...');
+            var child = exec('./ifconfigUser '+wlanId+' 192.168.1.1');
+			child.stdout.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.stderr.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.on('close', function(code) {
+				callback();
+			})
+        }
+        ,
+        function (callback)
+        {
+        	//TODO: FIRST KILL DNSMASQ BY PS AUX | GREP DNSMASQ , KILL <PID>
+
+            console.log("dnsmasq...");
+            var child = exec('dnsmasq -i '+wlanId+' -F 192.168.1.100,192.168.1.200,12h');
+			child.stdout.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.stderr.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.on('close', function(code) {
+				callback();
+			})
+        }
+        ,
+        function (callback)
+        {
+        	//TODO: RUN HOSTAPD IN BACKGROUND
+        	//TODO: MAKE SPAWN?
+        	//TODO: call callback at right moment based on stdout content
+
+            console.log("hostapd...");
+            var child = exec('hostapd /etc/hostapd/hostapd.conf &');
+			child.stdout.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.stderr.on('data', function(data) { 
+				console.log('stdout: ' + data); 
+			})
+			child.on('close', function(code) {
+				// callback();
+				cb(null, 'created accesspoint');
+			})
+        }
+    ]);
+
+	// ifconfig wlan3 up
+	// ifconfig wlan3 192.168.1.1
+	// dnsmasq -i wlan3 -F 192.168.1.100,192.168.1.200,12h
+	// hostapd /etc/hostapd/hostapd.conf
+
+	// ./ifconfigUser wlan3 up
+	// ./ifconfig wlan3 192.168.1.1
+	// dnsmasq -i wlan3 -F 192.168.1.100,192.168.1.200,12h -p 55
+	// hostapd /etc/hostapd/hostapd.conf
+}
 
 getAccesspoints = function(cb) {
 
@@ -101,7 +217,7 @@ getAccesspoints = function(cb) {
 	});
 }
 
-connectToAccesspoint = function(serviceName, cb) {
+connectToAccesspoint = function(serviceName, passphrase, cb) {
 	var wifi = connman.technologies['WiFi'];
 
 	wifi.findAccessPoint(serviceName, function(err, service) {
@@ -129,7 +245,7 @@ connectToAccesspoint = function(serviceName, cb) {
 				var failed = false;
 
 				console.log('Connecting ...');
-				cb(null, 'Connecting....');
+				// cb(null, 'Connecting....');
 
 				agent.on('Release', function() {
 					console.log('Release');
@@ -152,7 +268,7 @@ connectToAccesspoint = function(serviceName, cb) {
 					console.log(dict);
 
 					if ('Passphrase' in dict) {
-						callback({ 'Passphrase': '12345' });
+						callback({ 'Passphrase': passphrase });
 						return;
 					}
 
@@ -164,7 +280,7 @@ connectToAccesspoint = function(serviceName, cb) {
 				});
 
 				ap.on('PropertyChanged', function(name, value) {
-					console.log(name + '=' + value);
+					// console.log(name + '=' + value);
 
 					if (name == 'State') {
 						switch(value) {
@@ -187,7 +303,6 @@ connectToAccesspoint = function(serviceName, cb) {
 
 						case 'online':
 							console.log('Connected');
-							cb(null, 'Connected!');
 							break;
 						}
 					}
@@ -197,6 +312,36 @@ connectToAccesspoint = function(serviceName, cb) {
 	});
 }
 
+disconnectFromAccesspoint = function(serviceName, cb) {
+
+	var wifi = connman.technologies['WiFi'];
+
+	wifi.findAccessPoint(serviceName, function(err, service) {
+		//--check if service name exists
+		if (!service) {
+			cb(new Error('No such accesspoint: ' + serviceName));
+			return;
+		} else {
+			console.log('Try disconnecting from service: ' + service.serviceName);
+		}
+
+		//--get connection
+		connman.getConnection(service.serviceName, function(err, ap) {
+
+			/* Making connection to access point */
+			ap.disconnect(function(err) {
+
+				if (err) {
+					cb(err);
+					return;
+				}
+
+				// console.log('Disconnecting from ' + serviceName +'...');
+				cb(null, 'Disconnected from ' + serviceName +'...');
+			});
+		});
+	});
+}
 
 
 
