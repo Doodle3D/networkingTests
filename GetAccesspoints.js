@@ -19,19 +19,23 @@ connman.init(function() {
 
 
 	getAccesspoints(function(err, list) {
-		for (var index in list) {
-			var ap = list[index];
-			var name = String((ap.Name ? ap.Name : '*hidden*'));
-			console.log('  ' + name, '  \t\t\t Strength: ' + ap.Strength + '%', '  \t\t\t Security: ' + ap.Security);
-		}
-
-		connectToAccesspoint('Doodle3D-wisp', function(err, res) {
-			if(!err) {
-				console.log('connectToAccesspoint callback res: ' + res);
-			} else {
-				console.log('ERR ' + err);
+		if(!err) {
+			for (var index in list) {
+				var ap = list[index];
+				var name = String((ap.Name ? ap.Name : '*hidden*'));
+				console.log('  ' + name, '  \t\t\t Strength: ' + ap.Strength + '%', '  \t\t\t Security: ' + ap.Security);
 			}
-		})
+			
+			connectToAccesspoint('Doodle3D-wisp', function(err, res) {
+				if(!err) {
+					console.log('callback res: ' + res);
+				} else {
+					console.log('ERR ' + err);
+				}
+			})
+		} else {
+			console.log("error: " + err);
+		}
 	})
 	
 });
@@ -53,38 +57,42 @@ getAccesspoints = function(cb) {
 				if(!err) {
 					var wifi = connman.technologies['WiFi'];
 
-					Q.nfcall(function(callback) {
-						if(!properties.Powered) {
-							wifi.setProperty('Powered', true, function(err, res) {
-								console.log('Enabled wifi');
-								console.log('small timeout for wifi module to get powered...')
-								setTimeout(callback, 500, null, 'enabled wifi');
-								// callback(null, 'enabled wifi');
-							});
-						} else {
-							callback(null, 'wifi was already enabled');
-						}	
-					}).then(function(callback) {
+					if(!properties.Powered) {
+						wifi.setProperty('Powered', true, function(err, res) {
+							console.log('Enabled wifi');
+							console.log('small timeout for wifi module to get powered...')
+							setTimeout(scan, 5000); //10000ms = 10 sec = delay for antenna hardware to power up
+						});
+					} else {
+						console.log('wifi was already enabled');
+						scan();
+					}
 
+					function scan(callback) {
+						console.log("scan()");
 						technologies.WiFi.getProperties(function(err, properties) {
 							if(!err) {
-								if(properties.Powered) { 
+								if(properties.Powered === true) { 
 									console.log('Scanning...');
-									wifi.scan(function() {
-										wifi.listAccessPoints(function(err, list) {
-											console.log('Returning ' + list.length + ' Access Point(s)');
-											cb(null, list);
-											// callback(null, 'scanning');
-										});
+									wifi.scan(function(err) {
+										if(!err) {
+											wifi.listAccessPoints(function(err, list) {
+												console.log('Returning ' + list.length + ' Access Point(s)');
+												cb(null, list);
+											});
+										} else {
+											console.log(new Error('ERR: ' + err));
+											setTimeout(scan, 500); //--rescan if .NoCarrier error
+										}
 									});
 								} else {
-									console.log("wifi is not enabled yet...");
+									console.log("wifi is not enabled yet in software...");
 								}								
 							} else {
-								console.log(err);
+								console.log("ERR: " + err);
 							}
 						})	
-					});
+					}
 				}
 			})
 		} else {
