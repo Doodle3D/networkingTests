@@ -12,6 +12,7 @@
     "async": "~0.9.0",
     "q": "~1.0.1",
     "dbus": "git+https://github.com/Doodle3D/node-dbus.git",
-    "jsdx-connman": "git+https://github.com/Doodle3D/jsdx-connman.git"
+    "jsdx-connman": "git+https://github.com/Doodle3D/jsdx-connman.git",
+    "ps-node": "0.0.3"
   }
 }
