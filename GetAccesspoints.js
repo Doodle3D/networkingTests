@@ -19,59 +19,80 @@ process.env.DBUS_SESSION_BUS_ADDRESS = 'unix:path=/run/dbus/system_bus_socket';
 var connman = new ConnMan();
 
 connman.init(function() {
-
-	enableHotspot(function(err, res) {
+	testSequence(function(err,res) {
 		if(!err) {
-			console.log('RES: ' + res);
-
-			console.log('timeout...');
-			setTimeout(test, 10000, function(err, res) {
-				if(!err) {
-					console.log('test() res');
-				}
-			});
-		} else {
-			console.log('ERR: ' + err);
+			console.log('testSequence: ' + res);
 		}
 	})
-
-	function test(callback) {
-		getAccesspoints(function(err, list) {
-			if(!err) {
-				for (var index in list) {
-					var ap = list[index];
-					var name = String((ap.Name ? ap.Name : '*hidden*'));
-					console.log('  ' + name, '  \t\t\t Strength: ' + ap.Strength + '%', '  \t\t\t Security: ' + ap.Security);
-				}
-
-				disableHotspot(function(err,res) {
-					if(!err) { 
-						console.log("res: " + res);
-					}
-
-					connectToAccesspoint('Doodle3D-wisp', '', function(err, res) {
-					if(!err) {
-						console.log('callback res: ' + res);
-
-						console.log('timeout to disconnect...')
-						setTimeout(disconnectFromAccesspoint, 10000, 'Doodle3D-wisp', function(err, res) {
-							if(!err) {
-								console.log("res: " + res);
-							} else {
-								console.log("err: " + err);
-							}
-						});
-						} else {
-							console.log('ERR ' + err);
-						}
-					})
-				})
-			} else {
-				console.log("error: " + err);
-			}
-		})
-	};	
 });
+
+testSequence = function(cb) {
+	async.series
+    ([ 
+    	function (callback) {
+    		enableHotspot(function(err, res) {
+				if(!err) {
+					console.log('enableHotspot response: ' + res);
+					callback();
+				} else {
+					console.log('ERR: ' + err);
+				}
+			})
+    	}
+    	,
+    	function (callback) {
+    		getAccesspoints(function(err, list) {
+				if(!err) {
+					for (var index in list) {
+						var ap = list[index];
+						var name = String((ap.Name ? ap.Name : '*hidden*'));
+						console.log('  ' + name, '  \t\t\t Strength: ' + ap.Strength + '%', '  \t\t\t Security: ' + ap.Security);
+					} 
+					callback();
+				} else {
+					console.log("error: " + err);
+				}
+			})
+    	}
+    	,
+    	function (callback) {
+    		disableHotspot(function(err,res) {
+				if(!err) { 
+					console.log("res: " + res);
+					callback();
+				} else {
+					console.log("error: " + err);
+				}
+			});
+    	}
+    	,
+    	function (callback) {
+    		connectToAccesspoint('Doodle3D-wisp', '', function(err, res) {
+				if(!err) {
+					console.log('callback res: ' + res);
+					setTimeout(callback, 15000);
+				} else {
+					console.log('ERR ' + err);
+				}
+			})
+    	}
+    	,
+    	function (callback) {
+    		disconnectFromAccesspoint('Doodle3D-wisp', function(err, res) {
+				if(!err) {
+					console.log("res: " + res);
+					callback();
+				} else {
+					console.log("err: " + err);
+				}
+			});
+    	}
+    	,
+    	function (callback) {
+    		cb(null, 'testSequence finished');
+    	}
+    ]);
+}
 
 enableHotspot = function(cb) {
 	/* NOTE
@@ -115,23 +136,6 @@ enableHotspot = function(cb) {
 			})
         }
         ,
-        /* NOTE: dnsmasq is started at boot */
-   //     	,
-   //      function (callback) {
-   //      	//TODO: FIRST KILL DNSMASQ BY PS AUX | GREP DNSMASQ , KILL <PID>
-   //          console.log("dnsmasq start...");
-   //          var child = exec('dnsmasq -i '+wlanId+' -F 192.168.1.100,192.168.1.200,12h');
-			// child.stdout.on('data', function(data) { 
-			// 	console.log('stdout: ' + data); 
-			// })
-			// child.stderr.on('data', function(data) { 
-			// 	console.log('stdout: ' + data); 
-			// })
-			// child.on('close', function(code) {
-			// 	callback();
-			// })
-   //      }
-   //      ,
         function (callback) {
             console.log("hostapd start...");
 			
@@ -146,19 +150,21 @@ enableHotspot = function(cb) {
 			})
 			child.on('close', function(code) {
 				// callback();
-				cb(null, 'hotspot enabled');
+				// cb(null, 'hotspot enabled');
+				console.log("timeout...")
+				setTimeout(cb, 15000, null, 'hotspot enabled');
 			})
         }
     ]);
 
-	// ifconfig wlan3 up
-	// ifconfig wlan3 192.168.1.1
-	// dnsmasq -i wlan3 -F 192.168.1.100,192.168.1.200,12h
+	// ifconfig wlan0 up
+	// ifconfig wlan0 192.168.1.1
+	// dnsmasq -i wlan0 -F 192.168.1.100,192.168.1.200,12h
 	// hostapd /etc/hostapd/hostapd.conf
 
-	// ./ifconfigUser wlan3 up
-	// ./ifconfig wlan3 192.168.1.1
-	// dnsmasq -i wlan3 -F 192.168.1.100,192.168.1.200,12h -p 55
+	// ./ifconfigUser wlan0 up
+	// ./ifconfig wlan0 192.168.1.1
+	// dnsmasq -i wlan0 -F 192.168.1.100,192.168.1.200,12h -p 55
 	// hostapd /etc/hostapd/hostapd.conf
 }
 
@@ -178,7 +184,7 @@ disableHotspot = function(cb) {
 					if(properties.Powered) {
 						wifi.setProperty('Powered', false, function(err, res) {
 							console.log('Disabled wifi...');
-							console.log('small timeout for wifi module to power down...')
+							console.log('timeout for wifi module to power down...')
 							setTimeout(cb, 5000, null, 'wifi disabled');
 						});
 					} else {
@@ -211,7 +217,7 @@ getAccesspoints = function(cb) {
 					if(!properties.Powered) {
 						wifi.setProperty('Powered', true, function(err, res) {
 							console.log('Enabled wifi');
-							console.log('small timeout for wifi module to get powered...')
+							console.log('timeout for wifi module to get powered...')
 							setTimeout(scan, 5000); //10000ms = 10 sec = delay for antenna hardware to power up
 						});
 					} else {
@@ -269,7 +275,7 @@ connectToAccesspoint = function(serviceName, passphrase, cb) {
 						wifi.setProperty('Powered', true, function(err, res) {
 							console.log('Enabled wifi');
 							console.log('small timeout for wifi module to get powered...')
-							setTimeout(connect, 5000); //10000ms = 10 sec = delay for antenna hardware to power up
+							setTimeout(connect, 5000); //delay for antenna hardware to power up
 						});
 					} else {
 						console.log('wifi was already enabled');
